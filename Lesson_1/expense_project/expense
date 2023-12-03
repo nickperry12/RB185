@@ -3,51 +3,73 @@
 require "pg"
 require "date"
 
-DB = PG.connect(dbname: "expenses")
+class ExpenseData
+  def initialize
+    @connection = PG::Connection.new(dbname: "expenses")
+  end
 
-def display_list
-  all_rows_columns = DB.exec("SELECT * FROM expenses;")
+  def display_list
+    all_rows_columns = connection.exec("SELECT * FROM expenses;")
+    
+    all_rows_columns.each do |tuple|
+      columns = [ tuple["id"].rjust(3),
+            tuple["created_on"].rjust(10),
+            tuple["amount"].rjust(12),
+            tuple["memo"] ]
   
-  all_rows_columns.each do |tuple|
-    columns = [ tuple["id"].rjust(3),
-          tuple["created_on"].rjust(10),
-          tuple["amount"].rjust(12),
-          tuple["memo"] ]
-
-    puts columns.join(" | ")
+      puts columns.join(" | ")
+    end
   end
-end
-
-def display_help
-  puts <<~HELP
-  An expense recording system
-
-  Commands:
-  add AMOUNT MEMO - record a new expense
-  clear - delete all expenses
-  list - list all expenses
-  delete NUMBER - remove expense with id NUMBER
-  search QUERY - list expenses with a matching memo field
-  HELP
-end
-
-def add_data
-  if ARGV[1..2].all? { |item| item.nil? }
-    puts "You must provide an amount and memo."
-  else
-    cost, memo, date = ARGV[1], ARGV[2], Date.today
-    sql = "INSERT INTO expenses (amount, memo, created_on) VALUES (#{cost}, '#{memo}', '#{date}');"
-    DB.exec(sql)
+  
+  def display_help
+    puts <<~HELP
+    An expense recording system
+  
+    Commands:
+    add AMOUNT MEMO - record a new expense
+    clear - delete all expenses
+    list - list all expenses
+    delete NUMBER - remove expense with id NUMBER
+    search QUERY - list expenses with a matching memo field
+    HELP
   end
+  
+  def add_data
+    if ARGV[1..2].all? { |item| item.nil? }
+      puts "You must provide an amount and memo."
+    else
+      params = [ARGV[1], ARGV[2], Date.today]
+      sql = "INSERT INTO expenses (amount, memo, created_on) VALUES ($1, $2, $3)"
+      connection.exec_params(sql, params)
+    end
+  end
+
+  private
+
+  attr_reader :connection
 end
 
-command = ARGV[0]
+class CLI
+  def initialize
+    @db = ExpenseData.new
+  end
 
-case command
-when "list"
-  display_list
-when "add"
-  add_data
-else
-  display_help
+  def run
+    command = ARGV[0]
+
+    case command
+    when "list"
+      db.display_list
+    when "add"
+      db.add_data
+    else
+      db.display_help
+    end
+  end
+
+  private 
+
+  attr_reader :db
 end
+
+CLI.new.run
